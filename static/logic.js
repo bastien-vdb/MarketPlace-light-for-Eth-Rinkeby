@@ -1,24 +1,30 @@
-Moralis.initialize(""); // Application id from moralis.io
-Moralis.serverURL = ""; //Server url from moralis.io
-
-const nft_market_place_address = "" //NFT Market Place Contract, code of this contract is in the following github repository https://github.com/DanielMoralisSamples/25_NFT_MARKET_PLACE. 
+Moralis.initialize("JIQTygDdElgvGCIuUZu9NHC04u2WBqi901gmP4Ym"); // Application id from moralis.io
+Moralis.serverURL = "https://ndmrrcqumhov.usemoralis.com:2053/server"; //Server url from moralis.io
+const appId = "JIQTygDdElgvGCIuUZu9NHC04u2WBqi901gmP4Ym";
+const serverUrl = "https://ndmrrcqumhov.usemoralis.com:2053/server";
+Moralis.start({appId, serverUrl});
+const nft_market_place_address = "0x414F78e40b31dAC2582c045Aa9C8578469F10743" //NFT Market Place Contract, code of this contract is in the following github repository https://github.com/DanielMoralisSamples/25_NFT_MARKET_PLACE. 
 
 const web3 = new Web3(window.ethereum);
+const c = console.log.bind();
 
-Moralis.authenticate().then(function(){
+
+Moralis.authenticate().then(function(user){
+    console.log(user.get('ethAddress'));
     populateNFTs();
     populateOfferings();
-    populateBalance();
+    //populateBalance();
     subscribeOfferings();
     subscribeBuys();
     subscribeUpdateNFTs();
-});
+})
+
 
 //Real Time Updates
 async function subscribeOfferings(){
     let query = new Moralis.Query("PlacedOfferings");
     subscriptionAlerts = await query.subscribe();
-    subscriptionAlerts.on('create', (object) => {
+    subscriptionAlerts.on('update', (object) => {
         cleanOfferings();
         populateOfferings();
     });
@@ -30,7 +36,7 @@ async function subscribeBuys(){
     subscriptionAlerts.on('create', (object) => {
         cleanOfferings();
         populateOfferings();
-        populateBalance();
+        //populateBalance();
     });
 }
 
@@ -60,23 +66,27 @@ async function populateBalance(){
 //Display NFT Functions
 
 async function populateNFTs(){
-    const localNFTs = await getNFTs().then(function (data){
+    const localNFTs = await getNFTs().then(function (data){ 
         let nftDisplays = getNFTObjects(data);
         displayUserNFTs(nftDisplays);
     });
 }
 
 async function getNFTs(){
-    const queryAll = new Moralis.Query("PolygonNFTOwners");
-    queryAll.equalTo("owner_of", ethereum.selectedAddress);
-    const data = await queryAll.find()
+    // const queryAll = new Moralis.Query("PolygonNFTOwners");
+    // queryAll.equalTo("owner_of", ethereum.selectedAddress);
+    // const data = await queryAll.find()
+    let objectNFT = await Moralis.Web3API.account.getNFTs({chain: "rinkeby"});
+    let data = objectNFT.result;
     nftArray = [];
     for (let i=0; i< data.length; i++){
-        const metadataInfo = await fetch(data[i].get("token_uri"));
+        c(data[i].token_uri);
+        const metadataInfo = await fetch(data[i].token_uri);
         const metadata = await metadataInfo.json();
-        const nft = {"object_id":data[i].id, "token_id":data[i].get("token_id"),"token_uri":data[i].get("token_uri"),"contract_type":data[i].get("contract_type"),"token_address":data[i].get("token_address"),"image":metadata["image"],"name":metadata["name"],"description":metadata["description"]}
+        const nft = {"object_id":data[i].token_id, "token_id":data[i].token_id,"token_uri":data[i].token_uri,"contract_type":data[i].contract_type,"token_address":data[i].token_address,"image":metadata["image"],"name":metadata["name"],"description":metadata["description"]}
         nftArray.push(nft)
     }
+    console.log(nftArray);
     return nftArray;
 }
 
@@ -100,7 +110,8 @@ function cleanNFTList(){
     document.getElementById('NFTLists').innerHTML = "";
 }
 
-function generateNFTDisplay(id, name, description, uri){
+function generateNFTDisplay(id, name, description, uril){
+    let uri = getImgUrl(uril);
     const nftDisplay = `<div id="${id}" class="col-lg-4 text-center">
                             <img src=${uri} class="img-fluid rounded" style="max-width: 30%">
                             <h3>${name}</h3>
@@ -108,6 +119,11 @@ function generateNFTDisplay(id, name, description, uri){
                             <button id="button_${id}" class="btn btn-dark" onclick="selectNFT(this);">Select</button>
                         </div>`
     return nftDisplay;
+}
+
+function getImgUrl(uri){
+    let urlImg = uri.replace('ipfs://', "https://gateway.ipfs.io/ipfs/");
+    return urlImg
 }
 
 function getNFTObjects(array){
@@ -121,8 +137,9 @@ function getNFTObjects(array){
 async function selectNFT(nftObject){
     const nftId = nftObject.parentElement.id;
     let nft = window.nftArray.find(object => object.object_id == nftId);
+    let uri = getImgUrl(nft.image);
     const nftDisplay = `<div id="${nft.object_id}" class="text-center">
-                            <img src=${nft.image} class="img-fluid rounded" style="max-width: 40%">
+                            <img src=${uri} class="img-fluid rounded" style="max-width: 40%">
                             <h3>${nft.name}</h3>
                             <p>${nft.description}</p>
                             <div id="sellActions">
@@ -165,8 +182,10 @@ async function getOfferings(){
     offeringArray = [];
     for (let i=0; i< data.length; i++){
         let flag = await isOfferingClosed(data[i].get("offeringId"));
+        let uri = data[i].get("uri");
         if (!flag) {
-            const metadataInfo = await fetch(data[i].get("uri"));
+            uri = uri.replace('ipfs://', 'https://ipfs.moralis.io:2053/ipfs/');
+            const metadataInfo = await fetch(uri);
             const metadata = await metadataInfo.json();
             const offering = {"offeringId":data[i].get("offeringId"),"offerer":data[i].get("offerer"),"hostContract":data[i].get("hostContract"),"tokenId":data[i].get("tokenId"),"price":web3.utils.fromWei(data[i].get("price")),"image":metadata["image"],"name":metadata["name"],"description":metadata["description"]}
             offeringArray.push(offering)
@@ -184,6 +203,7 @@ async function isOfferingClosed(offeringId){
 }
 
 function generateOfferingDisplay(id, uri, name, price){
+    uri = uri.replace('ipfs://', 'https://ipfs.moralis.io:2053/ipfs/');
     const offeringDisplay = `<div id="${id}" class="row">
                                 <div class="col-lg-6 text-center">
                                     <img src=${uri} class="img-fluid rounded" style="max-width: 30%">
@@ -218,8 +238,9 @@ function cleanOfferings(){
 async function selectOffering(offeringObject){
     const offeringId = offeringObject.parentElement.parentElement.id;
     let offering = window.offeringArray.find(offering => offering.offeringId == offeringId);
+    let imgUrl = getImgUrl(offering.image);
     const offeringDisplay = `<div id="${offering.offeringId}" class="text-center">
-                            <img src=${offering.image} class="img-fluid rounded" style="max-width: 40%">
+                            <img src=${imgUrl} class="img-fluid rounded" style="max-width: 40%">
                             <h3>${offering.name}</h3>
                             <h3>${offering.price + " ETH"}</h3>
                             <div id="buyActions">
@@ -250,6 +271,7 @@ async function offerNFT(context){
 }
 
 async function placeOffering(_hostContract, _tokenId, _price) {
+    c("PlaceOffering function: "+_hostContract+" "+_tokenId+" "+_price);
     const params =  {hostContract: _hostContract,
                     offerer: ethereum.selectedAddress,
                     tokenId: _tokenId,
@@ -257,7 +279,8 @@ async function placeOffering(_hostContract, _tokenId, _price) {
     }
     const signedTransaction = await Moralis.Cloud.run("placeOffering", params);
     fulfillTx = await web3.eth.sendSignedTransaction(signedTransaction.rawTransaction);
-  	return fulfillTx;
+  	c(fulfillTx);
+    return fulfillTx;
 }
 
 async function approveMarketPlace(hostContract, tokenId){
